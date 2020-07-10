@@ -5,6 +5,7 @@ from datasets.lfpw_dataset import LFPWDataset
 from datasets.private_300w_dataset import Private300WDataset
 
 from landmark_dataset import LandmarkDataset
+from models.vgg_based_model import VGGBasedModel
 
 
 afw_database_root = "/data3/AFW/afw"
@@ -16,6 +17,8 @@ private_300w_database_root = "/data3/300W"
 
 def main():
     train_dataset, valid_dataset = prepare_datasets()
+
+    model = VGGBasedModel(in_channels=1)
 
 
 def prepare_datasets():
