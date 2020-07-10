@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 
@@ -66,3 +67,45 @@ class ConvolutionBatchNormReLU(nn.Module):
         x = self.relu(x)
 
         return x
+
+
+class ConnectionLayers(nn.Module):
+    def __init__(self):
+        super(ConnectionLayers, self).__init__()
+
+        self.fc = nn.Linear(in_feature=512, out_features=3136)
+        self.relu = nn.ReLU()
+        self.upsample = nn.UpsamplingBilinear2d(size=(112, 112))
+
+    def forward(self, image, previous_landmark, current_landmark, middle_feature_vector):
+        transform_matrix = self.estimate_transform_matrix(previous_landmark, current_landmark)
+        transformed_landmark = self.transform_landmark(current_landmark, transform_matrix)
+        transformed_image = self.transform_image(image, transform_matrix)
+        heatmap = self.generate_heatmap(image.shape, transformed_landmark)
+
+        x = self.fc(middle_feature_vector)
+        x = self.relu(x)
+        x = torch.reshape(x, (-1, 56, 56, 1))
+        x = self.upsample(x)
+
+        return transformed_image, heatmap, x
+
+    @staticmethod
+    def estimate_transform_matrix(previous_landmark, current_landmark):
+        matrix = None
+        return matrix
+
+    @staticmethod
+    def transform_image(image, transform_matrix):
+        transformed_image = None
+        return image
+
+    @staticmethod
+    def transform_landmark(current_landmark, transform_matrix):
+        transformed_landmark = None
+        return transformed_landmark
+
+    @staticmethod
+    def generate_heatmap(image_size, landmark):
+        heatmap_image = None
+        return heatmap_image
