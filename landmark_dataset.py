@@ -1,9 +1,11 @@
+import random
+
 from torch.utils.data.dataset import Dataset
 import numpy as np
 
 
 class LandmarkDataset(Dataset):
-    def __init__(self, datasets: list, is_train: bool):
+    def __init__(self, datasets: list, is_train: bool, average_landmark=None):
         super(LandmarkDataset, self).__init__()
 
         self.fixed_label = 0
@@ -25,6 +27,10 @@ class LandmarkDataset(Dataset):
         self.count = 0
 
         self.prepare_index_map()
+        self.prepare_landmark_cache()
+
+        if average_landmark is not None:
+            self.average_landmark = average_landmark
 
 
     def prepare_index_map(self):
@@ -34,20 +40,15 @@ class LandmarkDataset(Dataset):
             count_array = []
 
             for dataset in self.datasets:
-                dataset.set_train_mode()
+                dataset.set_validation_mode()
                 count_array.append(dataset.count(self.fixed_label))
 
-            min_count = min(count_array)
-            self.count = min_count * len(self.datasets)
+            self.count = sum(count_array)
 
-            for i in range(len(self)):
-                dataset_index = np.random.choice(range(0, len(self.datasets)))
-
+            for dataset_index, dataset in enumerate(self.datasets):
                 fixed_label = 0
-                count = self.datasets[dataset_index].count(fixed_label)
-                data_index = np.random.choice(range(0, count))
-
-                self.index_map.append((fixed_label, dataset_index, data_index))
+                for i in range(dataset.count(fixed_label)):
+                    self.index_map.append((fixed_label, dataset_index, i))
         else:
             count_array = []
 
@@ -61,6 +62,31 @@ class LandmarkDataset(Dataset):
                 fixed_label = 0
                 for i in range(dataset.count(fixed_label)):
                     self.index_map.append((fixed_label, dataset_index, i))
+
+    def prepare_landmark_cache(self):
+        landmark_centers = []
+        landmarks = []
+
+        average_landmark = np.zeros((68, 2))
+
+        for index in range(len(self)):
+            label, dataset_index, data_index = self.index_map[index]
+            _, annotation = self.datasets[dataset_index].get_datum(label, data_index)
+
+            landmark = np.array(annotation)
+            landmarks.append(landmark)
+
+            landmark_center = landmark.mean(axis=0)
+            landmark_centers.append(landmark_center)
+
+            normalized_landmark = landmark - landmark_center
+            average_landmark += normalized_landmark
+
+        average_landmark /= len(self)
+
+        self.landmark_centers = landmark_centers
+        self.landmarks = landmarks
+        self.average_landmark = average_landmark
 
     def __getitem__(self, index):
         if self.is_train is True:
@@ -87,7 +113,7 @@ class LandmarkDataset(Dataset):
 
                 image, annotation = self.datasets[dataset_index].get_datum(label, data_index)
 
-                image, target = self.create_input_and_target(image, annotation, label, index)
+                image, target = self.create_input_and_target(image, annotation, random_seed=index)
 
                 image = self.augment(index, image, is_infer=True)
                 image = np.copy(image[:, :, ::-1])
@@ -98,6 +124,43 @@ class LandmarkDataset(Dataset):
             target = int(target)
 
             return image, torch.LongTensor([target])
+
+    @staticmethod
+    def create_input_and_target(image, annotation, random_seed=None):
+        random.seed(random_seed)
+
+        if target == 0 and random.randint(0, 1) == 1:
+            do_sample_at_background = True
+        else:
+            do_sample_at_background = False
+
+        rotating_margin_factor = (math.sqrt(2.0) - 1.0) / 2.0
+
+        if do_sample_at_background is False:
+            face_box = FDDataset.make_box_from_landmark(annotation['landmark'])
+
+            rotating_margin_factor = (math.sqrt(2.0) - 1.0) / 2.0
+            margin_need = face_box[2] * rotating_margin_factor
+
+            x = int(round(face_box[0] - margin_need))
+            y = int(round(face_box[1] - margin_need))
+            width = int(round(face_box[2] + (margin_need * 2.0)))
+            height = int(round(face_box[3] + (margin_need * 2.0)))
+        else:
+            min_length = int(math.ceil(112.0 + (2.0 * (112.0 * rotating_margin_factor))))
+            image_width = image.shape[1]
+            image_height = image.shape[0]
+
+            sample_length = random.randint(min_length, min(image_width, image_height) - 1)
+
+            x = random.randint(0, image_width - sample_length - 1)
+            y = random.randint(0, image_height - sample_length - 1)
+            width = sample_length
+            height = sample_length
+
+        image = Cropper.crop(image, x, y, width, height)
+
+        return image, target
 
     def __len__(self):
         return self.count
