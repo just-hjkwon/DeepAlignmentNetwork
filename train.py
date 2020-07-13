@@ -59,7 +59,7 @@ def main():
     for epoch in range(init_epoch, max_epoch):
         tutor.set_epoch(epoch)
         train_loss = train_a_epoch(tutor, train_dataset)
-        validation_loss = validate(tutor, valid_dataset)
+        validation_loss = validate(tutor, train_dataset)
 
         tutor.update_learning_rate(validation_loss)
 
@@ -88,7 +88,8 @@ def prepare_datasets():
 
     datasets = [afw_dataset, helen_dataset, ibug_dataset, lfpw_dataset, private_300w_dataset]
 
-    train_dataset = LandmarkDataset(datasets=datasets, is_train=True)
+    preload_average_landmark = np.load("average_landmark.npy")
+    train_dataset = LandmarkDataset(datasets=datasets, is_train=True, average_landmark=preload_average_landmark)
     valid_dataset = LandmarkDataset(datasets=datasets, is_train=False, average_landmark=train_dataset.average_landmark)
 
     return train_dataset, valid_dataset

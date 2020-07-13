@@ -99,10 +99,9 @@ class LandmarkDataset(Dataset):
             face_box = landmark.min(axis=0).tolist() + landmark.max(axis=0).tolist()
             face_boxes.append(face_box)
 
-            landmark_center = landmark.mean(axis=0)
-            normalized_landmark = landmark - landmark_center
-
             if average_landmark is None:
+                landmark_center = landmark.mean(axis=0)
+                normalized_landmark = landmark - landmark_center
                 _average_landmark += normalized_landmark
 
         if average_landmark is None:
@@ -120,6 +119,7 @@ class LandmarkDataset(Dataset):
         box_length = max(box_width, box_height)
         average_landmark_scale = self.target_average_face_box_size / box_length
 
+        average_landmark -= average_landmark.mean(axis=0)
         average_landmark *= average_landmark_scale
         average_landmark += self.target_size / 2.0
 
