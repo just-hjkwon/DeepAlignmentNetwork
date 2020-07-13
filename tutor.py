@@ -32,12 +32,12 @@ class Tutor:
         self.best_error = sys.float_info.max
         self.epoch = 0
 
-    def train(self, input, target):
+    def train(self, input_data, target):
         if self.network.training is not True:
             self.network.train()
 
-        input = input.to(self.device)
-        prediction = self.network(input)
+        input_data = input_data.to(self.device)
+        prediction = self.network(input_data)
 
         if type(target) is list:
             for i in range(len(target)):
@@ -52,12 +52,12 @@ class Tutor:
 
         return loss.data
 
-    def validate(self, data, target):
+    def validate(self, input_data, target):
         if self.network.training is True:
             self.network.eval()
 
-        input = input.to(self.device)
-        prediction = self.network(input)
+        input_data = input_data.to(self.device)
+        prediction = self.network(input_data)
 
         if type(target) is list:
             for i in range(len(target)):

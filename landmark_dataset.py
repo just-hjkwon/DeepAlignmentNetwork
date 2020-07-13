@@ -144,10 +144,8 @@ class LandmarkDataset(Dataset):
             else:
                 label, dataset_index, data_index = self.index_map[index]
 
-                repeat_number = int(math.floor(index / self.num_data))
-                self.datasets[dataset_index].set_random_salt(repeat_number)
-
-                image, annotation = self.datasets[dataset_index].get_datum(label, data_index)
+                image, _ = self.datasets[dataset_index].get_datum(label, data_index)
+                annotation = [self.face_boxes[index], self.landmarks[index]]
 
                 image, target, pupil_distance = self.create_input_and_target(image, annotation, random_seed=index)
 
