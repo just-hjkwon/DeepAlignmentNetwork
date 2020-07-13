@@ -1,6 +1,8 @@
 import random
 
 from torch.utils.data.dataset import Dataset
+import torch
+
 import numpy as np
 
 
@@ -26,7 +28,13 @@ class LandmarkDataset(Dataset):
 
         self.count = 0
 
+        self.index_map = None
+
         self.prepare_index_map()
+
+        self.landmarks = None
+        self.average_landmark = None
+
         self.prepare_landmark_cache(average_landmark)
 
     def prepare_index_map(self):
@@ -60,7 +68,6 @@ class LandmarkDataset(Dataset):
                     self.index_map.append((fixed_label, dataset_index, i))
 
     def prepare_landmark_cache(self, average_landmark=None):
-        landmark_centers = []
         landmarks = []
 
         if average_landmark is None:
@@ -74,7 +81,6 @@ class LandmarkDataset(Dataset):
             landmarks.append(landmark)
 
             landmark_center = landmark.mean(axis=0)
-            landmark_centers.append(landmark_center)
 
             normalized_landmark = landmark - landmark_center
 
@@ -84,7 +90,6 @@ class LandmarkDataset(Dataset):
         if average_landmark is None:
             _average_landmark /= len(self)
 
-        self.landmark_centers = landmark_centers
         self.landmarks = landmarks
 
         if average_landmark is None:
