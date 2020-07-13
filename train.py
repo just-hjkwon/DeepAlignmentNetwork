@@ -5,6 +5,9 @@ from datasets.lfpw_dataset import LFPWDataset
 from datasets.private_300w_dataset import Private300WDataset
 
 from landmark_dataset import LandmarkDataset
+from models.vgg_based_model import VGGBasedModel
+
+import numpy as np
 
 
 afw_database_root = "/data3/AFW/afw"
@@ -17,6 +20,9 @@ private_300w_database_root = "/data3/300W"
 def main():
     train_dataset, valid_dataset = prepare_datasets()
 
+    model = VGGBasedModel(in_channels=1)
+    model.cuda()
+
 
 def prepare_datasets():
     afw_dataset = AFWDataset(afw_database_root)
@@ -28,7 +34,7 @@ def prepare_datasets():
     datasets = [afw_dataset, helen_dataset, ibug_dataset, lfpw_dataset, private_300w_dataset]
 
     train_dataset = LandmarkDataset(datasets=datasets, is_train=True)
-    valid_dataset = LandmarkDataset(datasets=datasets, is_train=False)
+    valid_dataset = LandmarkDataset(datasets=datasets, is_train=False, average_landmark=train_dataset.average_landmark)
 
     return train_dataset, valid_dataset
 
