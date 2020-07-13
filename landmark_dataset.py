@@ -27,11 +27,7 @@ class LandmarkDataset(Dataset):
         self.count = 0
 
         self.prepare_index_map()
-        self.prepare_landmark_cache()
-
-        if average_landmark is not None:
-            self.average_landmark = average_landmark
-
+        self.prepare_landmark_cache(average_landmark)
 
     def prepare_index_map(self):
         self.index_map = []
@@ -63,11 +59,12 @@ class LandmarkDataset(Dataset):
                 for i in range(dataset.count(fixed_label)):
                     self.index_map.append((fixed_label, dataset_index, i))
 
-    def prepare_landmark_cache(self):
+    def prepare_landmark_cache(self, average_landmark=None):
         landmark_centers = []
         landmarks = []
 
-        average_landmark = np.zeros((68, 2))
+        if average_landmark is None:
+            _average_landmark = np.zeros((68, 2))
 
         for index in range(len(self)):
             label, dataset_index, data_index = self.index_map[index]
@@ -80,13 +77,20 @@ class LandmarkDataset(Dataset):
             landmark_centers.append(landmark_center)
 
             normalized_landmark = landmark - landmark_center
-            average_landmark += normalized_landmark
 
-        average_landmark /= len(self)
+            if average_landmark is None:
+                _average_landmark += normalized_landmark
+
+        if average_landmark is None:
+            _average_landmark /= len(self)
 
         self.landmark_centers = landmark_centers
         self.landmarks = landmarks
-        self.average_landmark = average_landmark
+
+        if average_landmark is None:
+            self.average_landmark = _average_landmark
+        else:
+            self.average_landmark = average_landmark
 
     def __getitem__(self, index):
         if self.is_train is True:
