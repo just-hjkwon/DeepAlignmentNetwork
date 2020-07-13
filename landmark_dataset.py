@@ -132,33 +132,29 @@ class LandmarkDataset(Dataset):
             image, _ = self.datasets[dataset_index].get_datum(label, data_index)
             annotation = [self.face_boxes[index], self.landmarks[index]]
 
-            image, target = self.create_input_and_target(image, annotation)
+            image, target, pupil_distance = self.create_input_and_target(image, annotation)
 
-            image = np.copy(image[:, :, ::-1])
             target = target.flatten()
 
             image = self.transforms(image)
             target = torch.tensor(target)
         else:
             if index in list(self.val_cache.keys()):
-                image, target = self.val_cache[index]
+                image, target, pupil_distance = self.val_cache[index]
             else:
                 label, dataset_index, data_index = self.index_map[index]
 
-                repeat_number = int(math.floor(index / self.num_data))
-                self.datasets[dataset_index].set_random_salt(repeat_number)
+                image, _ = self.datasets[dataset_index].get_datum(label, data_index)
+                annotation = [self.face_boxes[index], self.landmarks[index]]
 
-                image, annotation = self.datasets[dataset_index].get_datum(label, data_index)
+                image, target, pupil_distance = self.create_input_and_target(image, annotation, random_seed=index)
 
-                image, target = self.create_input_and_target(image, annotation, random_seed=index)
-
-                image = np.copy(image[:, :, ::-1])
                 target = target.flatten()
 
                 image = self.transforms(image)
                 target = torch.tensor(target)
 
-        return image, target
+        return image, (target, pupil_distance)
 
     def create_input_and_target(self, image, annotation: list, random_seed: int = None):
         random.seed(random_seed)
@@ -194,13 +190,20 @@ class LandmarkDataset(Dataset):
         crop_y = int(round(box_center[1] - 56))
 
         image = Cropper.crop(image, crop_x, crop_y, self.target_size, self.target_size)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        image = np.expand_dims(image, axis=2)
+
         landmark[:, 0] -= crop_x
         landmark[:, 1] -= crop_y
 
-        target = landmark - self.average_landmark
-        target.flatten()
+        landmark_delta = landmark - self.average_landmark
 
-        return image, target
+        left_pupil = landmark[36:42, :].mean(axis=0)
+        right_pupil = landmark[42:48, :].mean(axis=0)
+
+        pupil_distance = np.linalg.norm((left_pupil - right_pupil))
+
+        return image, landmark_delta, pupil_distance
 
     def __len__(self):
         return self.count

@@ -52,6 +52,14 @@ class VGGBasedModel(nn.Module):
 
         return x
 
+    def loss(self, prediction, target):
+        landmark_delta_target = target[0]
+        pupil_distance = target[1]
+
+        loss = nn.MSELoss()(prediction / pupil_distance.view(-1, 1), landmark_delta_target / pupil_distance.view(-1, 1))
+
+        return loss
+
 
 class ConvolutionBatchNormReLU(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size):
