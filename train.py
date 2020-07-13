@@ -7,6 +7,8 @@ from datasets.private_300w_dataset import Private300WDataset
 from landmark_dataset import LandmarkDataset
 from models.vgg_based_model import VGGBasedModel
 
+from tutor import Tutor
+
 import numpy as np
 
 
@@ -22,6 +24,8 @@ def main():
 
     model = VGGBasedModel(in_channels=1)
     model.cuda()
+
+    tutor = Tutor(model)
 
 
 def prepare_datasets():
