@@ -36,6 +36,8 @@ class Tutor:
         if self.network.training is not True:
             self.network.train()
 
+        self.optimizer.zero_grad()
+
         input_data = input_data.to(self.device)
         prediction = self.network(input_data)
 
@@ -45,10 +47,11 @@ class Tutor:
         elif type(target) is torch.tensor:
             target = target.to(self.device)
 
-        loss = self.network.loss(prediction, target)
-        loss.backward()
+        with torch.set_grad_enabled(True):
+            loss = self.network.loss(prediction, target)
+            loss.backward()
 
-        self.optimizer.step()
+            self.optimizer.step()
 
         return loss.data
 
@@ -56,8 +59,9 @@ class Tutor:
         if self.network.training is True:
             self.network.eval()
 
-        input_data = input_data.to(self.device)
-        prediction = self.network(input_data)
+        with torch.set_grad_enabled(False):
+            input_data = input_data.to(self.device)
+            prediction = self.network(input_data)
 
         if type(target) is list:
             for i in range(len(target)):
