@@ -3,7 +3,10 @@ import os
 import torch
 import numpy as np
 import tqdm
+from tabulate import tabulate
 import time
+
+import cv2
 
 from datasets.afw_dataset import AFWDataset
 from datasets.helen_dataset import HELENDataset
@@ -14,7 +17,10 @@ from datasets.private_300w_dataset import Private300WDataset
 from landmark_dataset import LandmarkDataset
 from models.vgg_based_model import VGGBasedModel
 
+from landmark_evaluator import LandmarkEvaluator
+
 from tutor import Tutor
+
 
 # load_snapshot = "latest"
 load_snapshot = None
@@ -52,7 +58,7 @@ def main():
 
     if load_snapshot is not None:
         tutor.load(load_snapshot)
-        validate(tutor, valid_dataset)
+        validate(tutor, train_dataset)
 
         init_epoch = tutor.get_epoch() + 1
 
@@ -78,6 +84,41 @@ def main():
 
         tutor.save('latest')
 
+        common_test = test(tutor, test_datasets[0])
+        challenging_test = test(tutor, test_datasets[1])
+        public_300w_test = test(tutor, test_datasets[2])
+        private_300w_test = test(tutor, test_datasets[3])
+        full_test = test(tutor, test_datasets[4])
+
+        common_inter_pupil_error = common_test.get_mean_inter_pupil_distance() * 100.0
+        common_inter_ocular_error = common_test.get_mean_inter_ocular_distance() * 100.0
+        common_diagonal_box_error = common_test.get_mean_box_diagonal_distance() * 100.0
+
+        challenging_inter_pupil_error = challenging_test.get_mean_inter_pupil_distance() * 100.0
+        challenging_inter_ocular_error = challenging_test.get_mean_inter_ocular_distance() * 100.0
+        challenging_diagonal_box_error = challenging_test.get_mean_box_diagonal_distance() * 100.0
+
+        full_inter_pupil_error = full_test.get_mean_inter_pupil_distance() * 100.0
+        full_inter_ocular_error = full_test.get_mean_inter_ocular_distance() * 100.0
+        full_diagonal_box_error = full_test.get_mean_box_diagonal_distance() * 100.0
+
+        public_300w_auc_0_08, public_300w_failure_rate = public_300w_test.get_inter_ocular_auc_and_failure_rate(0.08)
+        public_300w_failure_rate *= 100.0
+        private_300w_auc_0_08, private_300w_failure_rate = private_300w_test.get_inter_ocular_auc_and_failure_rate(0.08)
+        private_300w_failure_rate *= 100.0
+
+        table0_header = ["", "Common", "Challenging", "Full"]
+        table0 = [["Inter pupil", common_inter_pupil_error, challenging_inter_pupil_error, full_inter_pupil_error],
+                  ["Inter ocular", common_inter_ocular_error, challenging_inter_ocular_error, full_inter_ocular_error],
+                  ["Diagonal box", common_diagonal_box_error, challenging_diagonal_box_error, full_diagonal_box_error]]
+
+        table1_header = ["", "AUC 0.08", "Failure (%%)"]
+        table1 = [["300W public", public_300w_auc_0_08, public_300w_failure_rate],
+                  ["300W private", private_300w_auc_0_08, private_300w_failure_rate]]
+
+        print(tabulate(table0, headers=table0_header, tablefmt='fancy_grid'))
+        print(tabulate(table1, headers=table1_header, tablefmt='fancy_grid'))
+
 
 def prepare_datasets():
     afw_dataset = AFWDataset(afw_database_root)
@@ -91,6 +132,7 @@ def prepare_datasets():
     challenging_test_datasets = [ibug_dataset]
     public_300w_test_datasets = [lfpw_dataset, helen_dataset, ibug_dataset]
     private_300w_test_datasets = [private_300w_dataset]
+    full_datasets = [afw_dataset, helen_dataset, ibug_dataset, lfpw_dataset, private_300w_dataset]
 
     # train_dataset = LandmarkDataset(datasets=train_datasets, is_train=True)
     # np.save("average_landmark", train_dataset.average_landmark)
@@ -106,9 +148,11 @@ def prepare_datasets():
                                                average_landmark=train_dataset.average_landmark)
     private_300w_test_dataset = LandmarkDataset(datasets=private_300w_test_datasets, is_train=False,
                                                 average_landmark=train_dataset.average_landmark)
+    full_dataset = LandmarkDataset(datasets=full_datasets, is_train=False,
+                                   average_landmark=train_dataset.average_landmark)
 
     return train_dataset, [common_test_dataset, challenging_test_dataset, public_300w_test_dataset,
-                           private_300w_test_dataset]
+                           private_300w_test_dataset, full_dataset]
 
 
 def train_a_epoch(tutor, train_data_set):
@@ -204,7 +248,7 @@ def test(tutor: Tutor, test_data_set: LandmarkDataset):
         _, output = tutor.validate(data, target)
 
         time_string = get_time_string()
-        description = "%s Test.| Epoch %d" % (time_string, tutor.epoch)
+        description = "%s Test  | Epoch %d" % (time_string, tutor.epoch)
         epoch_bar.set_description(description)
 
         for (_output, _target) in zip(output, target[0]):
@@ -217,10 +261,13 @@ def test(tutor: Tutor, test_data_set: LandmarkDataset):
             predicted_landmarks.append(predicted_landmark)
             gt_landmarks.append(gt_landmark)
 
-    time_string = get_time_string()
+    evaluator = LandmarkEvaluator(predicted_landmarks, gt_landmarks)
 
+    time_string = get_time_string()
     description = "%s Test.| Epoch %d" % (time_string, tutor.epoch)
     print(description)
+
+    return evaluator
 
 
 def get_time_string():
