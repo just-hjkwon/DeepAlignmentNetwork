@@ -98,12 +98,17 @@ def prepare_datasets():
     preload_average_landmark = np.load("average_landmark.npy")
     train_dataset = LandmarkDataset(datasets=train_datasets, is_train=True, average_landmark=preload_average_landmark)
 
-    common_test_dataset = LandmarkDataset(datasets=common_test_datasets, is_train=False, average_landmark=train_dataset.average_landmark)
-    challenging_test_dataset = LandmarkDataset(datasets=challenging_test_datasets, is_train=False, average_landmark=train_dataset.average_landmark)
-    public_300w_test_dataset = LandmarkDataset(datasets=public_300w_test_datasets, is_train=False, average_landmark=train_dataset.average_landmark)
-    private_300w_test_dataset = LandmarkDataset(datasets=private_300w_test_datasets, is_train=False, average_landmark=train_dataset.average_landmark)
+    common_test_dataset = LandmarkDataset(datasets=common_test_datasets, is_train=False,
+                                          average_landmark=train_dataset.average_landmark)
+    challenging_test_dataset = LandmarkDataset(datasets=challenging_test_datasets, is_train=False,
+                                               average_landmark=train_dataset.average_landmark)
+    public_300w_test_dataset = LandmarkDataset(datasets=public_300w_test_datasets, is_train=False,
+                                               average_landmark=train_dataset.average_landmark)
+    private_300w_test_dataset = LandmarkDataset(datasets=private_300w_test_datasets, is_train=False,
+                                                average_landmark=train_dataset.average_landmark)
 
-    return train_dataset, [common_test_dataset, challenging_test_dataset, public_300w_test_dataset, private_300w_test_dataset]
+    return train_dataset, [common_test_dataset, challenging_test_dataset, public_300w_test_dataset,
+                           private_300w_test_dataset]
 
 
 def train_a_epoch(tutor, train_data_set):
@@ -149,8 +154,7 @@ def validate(tutor, validation_data_set):
 
     time_string = get_time_string()
     current_learning_rate = tutor.get_current_learning_rate()
-    phase_string = '%s Valid.| Epoch %d, learning rate: %f' % (
-        time_string, tutor.epoch, current_learning_rate)
+    phase_string = '%s Valid.| Epoch %d, learning rate: %f' % (time_string, tutor.epoch, current_learning_rate)
     print(phase_string)
 
     validation_loss = 0.0
@@ -180,6 +184,43 @@ def validate(tutor, validation_data_set):
     print(description)
 
     return average_loss
+
+
+def test(tutor: Tutor, test_data_set: LandmarkDataset):
+    loader = torch.utils.data.DataLoader(test_data_set, batch_size=batch_size, shuffle=False, **kwargs)
+
+    time_string = get_time_string()
+    current_learning_rate = tutor.get_current_learning_rate()
+    phase_string = '%s Test.| Epoch %d, learning rate: %f' % (time_string, tutor.epoch, current_learning_rate)
+    print(phase_string)
+
+    predicted_landmarks = []
+    gt_landmarks = []
+
+    description = get_time_string()
+    epoch_bar = tqdm.tqdm(loader, desc=description)
+
+    for batch_idx, (data, target) in enumerate(epoch_bar):
+        _, output = tutor.validate(data, target)
+
+        time_string = get_time_string()
+        description = "%s Test.| Epoch %d" % (time_string, tutor.epoch)
+        epoch_bar.set_description(description)
+
+        for (_output, _target) in zip(output, target[0]):
+            landmark_delta = _output.view(-1, 2).cpu().numpy()
+            predicted_landmark = test_data_set.average_landmark + landmark_delta
+
+            gt_landmark_delta = _target.view(-1, 2).cpu().numpy()
+            gt_landmark = test_data_set.average_landmark + gt_landmark_delta
+
+            predicted_landmarks.append(predicted_landmark)
+            gt_landmarks.append(gt_landmark)
+
+    time_string = get_time_string()
+
+    description = "%s Test.| Epoch %d" % (time_string, tutor.epoch)
+    print(description)
 
 
 def get_time_string():
