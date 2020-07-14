@@ -59,7 +59,7 @@ class LandmarkDataset(Dataset):
             count_array = []
 
             for dataset in self.datasets:
-                dataset.set_validation_mode()
+                dataset.set_train_mode()
                 count_array.append(dataset.count(self.fixed_label))
 
             self.count = sum(count_array)
