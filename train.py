@@ -1,6 +1,8 @@
 import os
 
 import torch
+from torch.utils.tensorboard import SummaryWriter
+
 import numpy as np
 import tqdm
 from tabulate import tabulate
@@ -21,7 +23,6 @@ from landmark_evaluator import LandmarkEvaluator
 
 from tutor import Tutor
 
-
 # load_snapshot = "latest"
 load_snapshot = None
 
@@ -35,6 +36,16 @@ learning_rate = 0.001
 weight_decay = 0.00005
 
 num_workers = 4
+
+tensorboard_directory = os.path.basename(os.path.abspath("."))
+tensorboard_logdir = "/workspace/tensorboard_DAN_logs/" + tensorboard_directory
+
+tensorboard_tags = ['General/Learning rate', 'Loss/Train', 'Loss/Validation',
+                    'Pupil/Common', 'Pupil/Challenging', 'Pupil/Full',
+                    'Inter-ocular/Common', 'Inter-ocular/Challenging', 'Inter-ocular/Full',
+                    'Dialgonal-box/Common', 'Dialgonal-box/Challenging', 'Dialgonal-box/Full',
+                    'Public 300W/AUC', 'Public 300W/Failure rate',
+                    'Private 300W/AUC', 'Private 300W/Failure rate']
 
 kwargs = {'num_workers': num_workers, 'pin_memory': True}
 os.environ['CUDA_VISIBLE_DEVICES'] = gpu
@@ -61,6 +72,9 @@ def main():
         validate(tutor, train_dataset)
 
         init_epoch = tutor.get_epoch() + 1
+
+    purge_step = init_epoch if init_epoch == epoch else None
+    tensorboard_writer = SummaryWriter(log_dir=tensorboard_logdir, purge_step=purge_step)
 
     for epoch in range(init_epoch, max_epoch):
         tutor.set_epoch(epoch)
@@ -118,6 +132,30 @@ def main():
 
         print(tabulate(table0, headers=table0_header, tablefmt='fancy_grid'))
         print(tabulate(table1, headers=table1_header, tablefmt='fancy_grid'))
+
+        current_learning_rate = tutor.get_current_learning_rate()
+
+        tensorboard_writer.add_scalar(tensorboard_tags[0], current_learning_rate, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[1], train_loss, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[2], validation_loss, tutor.epoch)
+
+        tensorboard_writer.add_scalar(tensorboard_tags[3], common_inter_pupil_error, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[4], challenging_inter_pupil_error, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[5], full_inter_pupil_error, tutor.epoch)
+
+        tensorboard_writer.add_scalar(tensorboard_tags[6], common_inter_ocular_error, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[7], challenging_inter_ocular_error, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[8], full_inter_ocular_error, tutor.epoch)
+
+        tensorboard_writer.add_scalar(tensorboard_tags[9], common_diagonal_box_error, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[10], challenging_diagonal_box_error, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[11], full_diagonal_box_error, tutor.epoch)
+
+        tensorboard_writer.add_scalar(tensorboard_tags[12], public_300w_auc_0_08, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[13], public_300w_failure_rate, tutor.epoch)
+
+        tensorboard_writer.add_scalar(tensorboard_tags[14], private_300w_auc_0_08, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[15], private_300w_failure_rate, tutor.epoch)
 
 
 def prepare_datasets():
