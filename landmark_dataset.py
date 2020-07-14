@@ -91,6 +91,11 @@ class LandmarkDataset(Dataset):
 
         for index in range(len(self)):
             label, dataset_index, data_index = self.index_map[index]
+            if self.is_train is True:
+                self.datasets[dataset_index].set_train_mode()
+            else:
+                self.datasets[dataset_index].set_validation_mode()
+
             _, annotation = self.datasets[dataset_index].get_datum(label, data_index)
 
             landmark = np.array(annotation)
@@ -129,6 +134,7 @@ class LandmarkDataset(Dataset):
         if self.is_train is True:
             label, dataset_index, data_index = self.index_map[index]
 
+            self.datasets[dataset_index].set_train_mode()
             image, _ = self.datasets[dataset_index].get_datum(label, data_index)
             annotation = [self.face_boxes[index], self.landmarks[index]]
 
@@ -144,6 +150,7 @@ class LandmarkDataset(Dataset):
             else:
                 label, dataset_index, data_index = self.index_map[index]
 
+                self.datasets[dataset_index].set_validation_mode()
                 image, _ = self.datasets[dataset_index].get_datum(label, data_index)
                 annotation = [self.face_boxes[index], self.landmarks[index]]
 
