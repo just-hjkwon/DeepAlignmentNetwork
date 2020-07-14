@@ -44,7 +44,7 @@ def main():
     init_epoch = 0
     max_epoch = 20200713
 
-    train_dataset, valid_dataset = prepare_datasets()
+    train_dataset, test_datasets = prepare_datasets()
 
     model = VGGBasedModel(in_channels=1)
 
@@ -86,13 +86,24 @@ def prepare_datasets():
     lfpw_dataset = LFPWDataset(lfpw_database_root)
     private_300w_dataset = Private300WDataset(private_300w_database_root)
 
-    datasets = [afw_dataset, helen_dataset, ibug_dataset, lfpw_dataset, private_300w_dataset]
+    train_datasets = [afw_dataset, helen_dataset, lfpw_dataset]
+    common_test_datasets = [lfpw_dataset, helen_dataset]
+    challenging_test_datasets = [ibug_dataset]
+    public_300w_test_datasets = [lfpw_dataset, helen_dataset, ibug_dataset]
+    private_300w_test_datasets = [private_300w_dataset]
+
+    # train_dataset = LandmarkDataset(datasets=train_datasets, is_train=True)
+    # np.save("average_landmark", train_dataset.average_landmark)
 
     preload_average_landmark = np.load("average_landmark.npy")
-    train_dataset = LandmarkDataset(datasets=datasets, is_train=True, average_landmark=preload_average_landmark)
-    valid_dataset = LandmarkDataset(datasets=datasets, is_train=False, average_landmark=train_dataset.average_landmark)
+    train_dataset = LandmarkDataset(datasets=train_datasets, is_train=True, average_landmark=preload_average_landmark)
 
-    return train_dataset, valid_dataset
+    common_test_dataset = LandmarkDataset(datasets=common_test_datasets, is_train=False, average_landmark=train_dataset.average_landmark)
+    challenging_test_dataset = LandmarkDataset(datasets=challenging_test_datasets, is_train=False, average_landmark=train_dataset.average_landmark)
+    public_300w_test_dataset = LandmarkDataset(datasets=public_300w_test_datasets, is_train=False, average_landmark=train_dataset.average_landmark)
+    private_300w_test_dataset = LandmarkDataset(datasets=private_300w_test_datasets, is_train=False, average_landmark=train_dataset.average_landmark)
+
+    return train_dataset, [common_test_dataset, challenging_test_dataset, public_300w_test_dataset, private_300w_test_dataset]
 
 
 def train_a_epoch(tutor, train_data_set):
