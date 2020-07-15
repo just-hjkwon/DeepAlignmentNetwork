@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class VGGBasedModel(nn.Module):
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, predefine_canonical_face_landmark=None):
         super(VGGBasedModel, self).__init__()
 
         self.conv1a = ConvolutionBatchNormReLU(in_channels=in_channels, out_channels=64, kernel_size=3)
@@ -29,6 +29,8 @@ class VGGBasedModel(nn.Module):
 
         self.fc1_feature = None
 
+        self.predefine_canonical_face_landmark = predefine_canonical_face_landmark
+        self.canonical_face_landmark = None
 
     def forward(self, x):
         x = self.conv1a(x)
@@ -58,12 +60,26 @@ class VGGBasedModel(nn.Module):
         return x
 
     def loss(self, prediction, target):
-        landmark_delta_target = target[0]
+        if self.predefine_canonical_face_landmark is not None:
+            canonical_face_landmark = self.predefine_canonical_face_landmark
+        else:
+            canonical_face_landmark = self.canonical_face_landmark
+
+        canonical_face_landmark = canonical_face_landmark.reshape(-1, 68 * 2)
+
+        canonical_face_landmark = torch.tensor(canonical_face_landmark)
+        canonical_face_landmark = canonical_face_landmark.to(prediction.device)
+        landmark = target[0]
+
+        landmark_delta_target = landmark - canonical_face_landmark
         pupil_distance = target[1]
 
-        loss = nn.MSELoss()(prediction / pupil_distance.view(-1, 1), landmark_delta_target / pupil_distance.view(-1, 1))
+        loss = nn.MSELoss()(prediction  / pupil_distance.view(-1, 1), landmark_delta_target / pupil_distance.view(-1, 1))
 
         return loss
+
+    def set_canonical_face_landmark(self, canonical_face_landmark):
+        self.canonical_face_landmark = canonical_face_landmark
 
 
 class ConvolutionBatchNormReLU(nn.Module):

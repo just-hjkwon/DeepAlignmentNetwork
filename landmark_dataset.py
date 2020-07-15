@@ -96,7 +96,8 @@ class LandmarkDataset(Dataset):
             else:
                 self.datasets[dataset_index].set_validation_mode()
 
-            _, annotation = self.datasets[dataset_index].get_datum(label, data_index)
+            _, annotation_filename = self.datasets[dataset_index].get_filename(label, data_index)
+            annotation = self.datasets[dataset_index].parse_annotation(annotation_filename)
 
             landmark = np.array(annotation)
             landmarks.append(landmark)
@@ -203,14 +204,12 @@ class LandmarkDataset(Dataset):
         landmark[:, 0] -= crop_x
         landmark[:, 1] -= crop_y
 
-        landmark_delta = landmark - self.average_landmark
-
         left_pupil = landmark[36:42, :].mean(axis=0)
         right_pupil = landmark[42:48, :].mean(axis=0)
 
         pupil_distance = np.linalg.norm((left_pupil - right_pupil))
 
-        return image, landmark_delta, pupil_distance
+        return image, landmark, pupil_distance
 
     def __len__(self):
         return self.count

@@ -18,6 +18,7 @@ from datasets.private_300w_dataset import Private300WDataset
 
 from landmark_dataset import LandmarkDataset
 from models.vgg_based_model import VGGBasedModel
+from models.deep_alignment_network import DeepAlignmentNetwork
 
 from landmark_evaluator import LandmarkEvaluator
 
@@ -63,7 +64,8 @@ def main():
 
     train_dataset, test_datasets = prepare_datasets()
 
-    model = VGGBasedModel(in_channels=1)
+    # model = VGGBasedModel(in_channels=1, predefine_canonical_face_landmark=train_dataset.average_landmark)
+    model = DeepAlignmentNetwork(train_dataset.average_landmark, 2)
 
     tutor = Tutor(model, device, learning_rate=learning_rate, weight_decay=weight_decay)
 
@@ -73,7 +75,7 @@ def main():
 
         init_epoch = tutor.get_epoch() + 1
 
-    purge_step = init_epoch if init_epoch == epoch else None
+    purge_step = init_epoch
     tensorboard_writer = SummaryWriter(log_dir=tensorboard_logdir, purge_step=purge_step)
 
     for epoch in range(init_epoch, max_epoch):
