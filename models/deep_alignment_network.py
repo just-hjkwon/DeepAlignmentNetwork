@@ -14,13 +14,13 @@ class DeepAlignmentNetwork(nn.Module):
     def __init__(self, average_landmark, stage_count):
         super(DeepAlignmentNetwork, self).__init__()
 
-        self.average_landmark = average_landmark
+        self.average_landmark = average_landmark.astype(dtype=np.float32)
         self.stage_count = stage_count
         self.models = torch.nn.Sequential()
 
         for i in range(stage_count):
             if i == 0:
-                model = VGGBasedModel(in_channels=1, predefine_canonical_face_landmark=self.average_landmark)
+                model = VGGBasedModel(in_channels=1)
                 self.models.add_module("VGGBasedModel %d" % i, model)
             else:
                 model = VGGBasedModel(in_channels=3)
@@ -29,6 +29,10 @@ class DeepAlignmentNetwork(nn.Module):
         self.connection_layer = ConnectionLayers(self.average_landmark)
         self.models[0].load_state_dict(
             torch.load("/home/hjkwon/Desktop/DeepAlignmentNetwork-4-1st_stage/snapshots/best.weights"))
+
+        for i in range(stage_count - 1):
+            for param in self.models[i].parameters():
+                param.requires_grad = False
 
         self.transform_matrices = []
         self.untransform_matrices = []
@@ -42,25 +46,39 @@ class DeepAlignmentNetwork(nn.Module):
 
         for i in range(self.stage_count):
             if i == 0:
-                x = self.models[i](x)
-            else:
-                landmark_delta = x.view(-1, 68, 2).detach().cpu().numpy()
-                predicted_landmark = self.average_landmark + landmark_delta
+                identical_transform_matrix = np.eye(2, 3, dtype=np.float32)
+                identical_transform_matrix[:, 2] = 1.0
 
-                x = self.connection_layer(images, predicted_landmark, self.models[i - 1].fc1_feature)
+                batch_size = len(x)
+
+                identical_transforms = [identical_transform_matrix] * batch_size
+                previous_landmarks = [self.average_landmark] * batch_size
+
+                self.models[i].set_previous_prediction_prior(previous_landmarks, identical_transforms, identical_transforms)
+
+                x = self.models[i](x)
+
+                landmark_delta = x.view(-1, 68, 2).detach().cpu().numpy()
+                previous_landmark = self.average_landmark + landmark_delta
+            else:
+                x = self.connection_layer(images, previous_landmark, self.models[i - 1].fc1_feature)
 
                 self.transform_matrices.append(self.connection_layer.transform_matrices)
                 self.untransform_matrices.append(self.connection_layer.untransform_matrices)
 
-                trnasformed_landmarks = []
-                for index, landmark in enumerate(predicted_landmark):
-                    trnasformed_landmark = self.connection_layer.transform_landmark(landmark, self.transform_matrices[i-1][index])
-                    trnasformed_landmarks.append(trnasformed_landmark)
-                trnasformed_landmarks = np.array(trnasformed_landmarks)
-
-                self.models[i].set_canonical_face_landmark(trnasformed_landmarks)
+                self.models[i].set_previous_prediction_prior(previous_landmark, self.connection_layer.transform_matrices, self.connection_layer.untransform_matrices)
 
                 x = self.models[i](x)
+
+        image = np.copy(images[0])
+        landmark_delta = x[0].detach().cpu().numpy()
+        landmark = self.untransform_landmark(landmark_delta, 0)
+
+        for l in landmark:
+            cv2.circle(image, (int(l[0]), int(l[1])), 2, (255, 255, 255), -1)
+
+        cv2.imshow("image", image)
+        cv2.waitKey(10)
 
         return x
 
@@ -75,21 +93,9 @@ class DeepAlignmentNetwork(nn.Module):
 
         return loss
 
-    def untransform_landmark(self, landmark, index):
-        for i in reversed(range(0, self.stage_count - 1)):
-            if self.models[i].predefine_canonical_face_landmark is None:
-                landmark = self.models[i + 1].predefine_canonical_face_landmark + landmark
-            else:
-                landmark = self.models[i + 1].canonical_face_landmark[index] + landmark
+    def untransform_landmark(self, landmark_delta, index):
+        return self.models[-1].untransform_landmark(landmark_delta, index)
 
-            landmark = self.connection_layer.transform_landmark(landmark, self.untransform_matrices[i][index])
-
-        if self.models[0].predefine_canonical_face_landmark is None:
-            landmark = self.models[0].predefine_canonical_face_landmark + landmark
-        else:
-            landmark = self.models[0].canonical_face_landmark[index] + landmark
-
-        return landmark
 
 class CanonicalFaceShape():
     def __init__(self, average_landmark):
@@ -159,9 +165,12 @@ class ConnectionLayers(nn.Module):
     def estimate_trans_untransform_matrices(self, landmark):
         self.similarity_transform.estimate(landmark, self.canonical_face_landmark)
         transform_matrix = self.similarity_transform.params[0:2, :]
+        transform_matrix = np.vstack([transform_matrix, np.array([0, 0, 1]).T])
 
-        self.similarity_transform.estimate(self.canonical_face_landmark, landmark, )
-        untransform_matrix = self.similarity_transform.params[0:2, :]
+        untransform_matrix = np.linalg.inv(transform_matrix)
+
+        transform_matrix = transform_matrix[0:2, :].astype(dtype=np.float32)
+        untransform_matrix = untransform_matrix[0:2, :].astype(dtype=np.float32)
 
         return transform_matrix, untransform_matrix
 

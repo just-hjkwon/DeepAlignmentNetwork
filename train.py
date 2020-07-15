@@ -275,7 +275,7 @@ def test(tutor: Tutor, test_data_set: LandmarkDataset):
 
     time_string = get_time_string()
     current_learning_rate = tutor.get_current_learning_rate()
-    phase_string = '%s Test.| Epoch %d, learning rate: %f' % (time_string, tutor.epoch, current_learning_rate)
+    phase_string = '%s Test  | Epoch %d, learning rate: %f' % (time_string, tutor.epoch, current_learning_rate)
     print(phase_string)
 
     predicted_landmarks = []
@@ -291,12 +291,11 @@ def test(tutor: Tutor, test_data_set: LandmarkDataset):
         description = "%s Test  | Epoch %d" % (time_string, tutor.epoch)
         epoch_bar.set_description(description)
 
-        for (_output, _target) in zip(output, target[0]):
+        for index, (_output, _target) in enumerate(zip(output, target[0])):
             landmark_delta = _output.view(-1, 2).cpu().numpy()
-            predicted_landmark = test_data_set.average_landmark + landmark_delta
+            predicted_landmark = tutor.network.untransform_landmark(landmark_delta, index)
 
-            gt_landmark_delta = _target.view(-1, 2).cpu().numpy()
-            gt_landmark = test_data_set.average_landmark + gt_landmark_delta
+            gt_landmark = _target.view(-1, 2).cpu().numpy()
 
             predicted_landmarks.append(predicted_landmark)
             gt_landmarks.append(gt_landmark)
@@ -304,7 +303,7 @@ def test(tutor: Tutor, test_data_set: LandmarkDataset):
     evaluator = LandmarkEvaluator(predicted_landmarks, gt_landmarks)
 
     time_string = get_time_string()
-    description = "%s Test.| Epoch %d" % (time_string, tutor.epoch)
+    description = "%s Test  | Epoch %d" % (time_string, tutor.epoch)
     print(description)
 
     return evaluator

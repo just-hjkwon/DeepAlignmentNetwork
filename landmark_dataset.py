@@ -167,8 +167,8 @@ class LandmarkDataset(Dataset):
     def create_input_and_target(self, image, annotation: list, random_seed: int = None):
         random.seed(random_seed)
 
-        face_box = np.array(annotation[0])
-        landmark = np.array(annotation[1])
+        face_box = np.array(annotation[0], dtype=np.float32)
+        landmark = np.array(annotation[1], dtype=np.float32)
 
         box_width = face_box[2] - face_box[0]
         box_height = face_box[3] - face_box[1]
