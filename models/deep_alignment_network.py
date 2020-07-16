@@ -27,8 +27,6 @@ class DeepAlignmentNetwork(nn.Module):
                 self.models.add_module("VGGBasedModel %d" % i, model)
 
         self.connection_layer = ConnectionLayers(self.average_landmark)
-        self.models[0].load_state_dict(
-            torch.load("/home/hjkwon/Desktop/DeepAlignmentNetwork-4-1st_stage/snapshots/best.weights"))
 
         if end_to_end is False:
             for i in range(stage_count - 1):

@@ -64,8 +64,13 @@ def main():
 
     train_dataset, test_datasets = prepare_datasets()
 
-    # model = VGGBasedModel(in_channels=1, predefine_canonical_face_landmark=train_dataset.average_landmark)
+    ## single stage model
+    # model = DeepAlignmentNetwork(train_dataset.average_landmark, 1)
+    ## double stage model
     model = DeepAlignmentNetwork(train_dataset.average_landmark, 2)
+
+    ## for using previous stage's ptrained weight.
+    # model.load_state_dict(torch.load('./snapshots/best.weights'), strict=False)
 
     tutor = Tutor(model, device, learning_rate=learning_rate, weight_decay=weight_decay)
 
