@@ -94,9 +94,14 @@ class DeepAlignmentNetwork(nn.Module):
 
         for i in range(self.stage_count):
             if i != self.stage_count - 1:
-                loss = self.models[i].loss(self.middle_stage_outputs[i], target)
+                _loss = self.models[i].loss(self.middle_stage_outputs[i], target)
             else:
-                loss += self.models[i].loss(prediction, target)
+                _loss = self.models[i].loss(prediction, target)
+
+            if loss is None:
+                loss = _loss
+            else:
+                loss += _loss
 
         return loss
 
