@@ -1,6 +1,8 @@
 import os
 
 import torch
+from torch.utils.tensorboard import SummaryWriter
+
 import numpy as np
 import tqdm
 from tabulate import tabulate
@@ -16,11 +18,11 @@ from datasets.private_300w_dataset import Private300WDataset
 
 from landmark_dataset import LandmarkDataset
 from models.vgg_based_model import VGGBasedModel
+from models.deep_alignment_network import DeepAlignmentNetwork
 
 from landmark_evaluator import LandmarkEvaluator
 
 from tutor import Tutor
-
 
 # load_snapshot = "latest"
 load_snapshot = None
@@ -35,6 +37,16 @@ learning_rate = 0.001
 weight_decay = 0.00005
 
 num_workers = 4
+
+tensorboard_directory = os.path.basename(os.path.abspath("."))
+tensorboard_logdir = "/workspace/tensorboard_DAN_logs/" + tensorboard_directory
+
+tensorboard_tags = ['General/Learning rate', 'Loss/Train', 'Loss/Validation',
+                    'Pupil/Common', 'Pupil/Challenging', 'Pupil/Full',
+                    'Inter-ocular/Common', 'Inter-ocular/Challenging', 'Inter-ocular/Full',
+                    'Dialgonal-box/Common', 'Dialgonal-box/Challenging', 'Dialgonal-box/Full',
+                    'Public 300W/AUC', 'Public 300W/Failure rate',
+                    'Private 300W/AUC', 'Private 300W/Failure rate']
 
 kwargs = {'num_workers': num_workers, 'pin_memory': True}
 os.environ['CUDA_VISIBLE_DEVICES'] = gpu
@@ -52,7 +64,8 @@ def main():
 
     train_dataset, test_datasets = prepare_datasets()
 
-    model = VGGBasedModel(in_channels=1)
+    # model = VGGBasedModel(in_channels=1, predefine_canonical_face_landmark=train_dataset.average_landmark)
+    model = DeepAlignmentNetwork(train_dataset.average_landmark, 2)
 
     tutor = Tutor(model, device, learning_rate=learning_rate, weight_decay=weight_decay)
 
@@ -61,6 +74,9 @@ def main():
         validate(tutor, train_dataset)
 
         init_epoch = tutor.get_epoch() + 1
+
+    purge_step = init_epoch
+    tensorboard_writer = SummaryWriter(log_dir=tensorboard_logdir, purge_step=purge_step)
 
     for epoch in range(init_epoch, max_epoch):
         tutor.set_epoch(epoch)
@@ -119,6 +135,30 @@ def main():
         print(tabulate(table0, headers=table0_header, tablefmt='fancy_grid'))
         print(tabulate(table1, headers=table1_header, tablefmt='fancy_grid'))
 
+        current_learning_rate = tutor.get_current_learning_rate()
+
+        tensorboard_writer.add_scalar(tensorboard_tags[0], current_learning_rate, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[1], train_loss, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[2], validation_loss, tutor.epoch)
+
+        tensorboard_writer.add_scalar(tensorboard_tags[3], common_inter_pupil_error, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[4], challenging_inter_pupil_error, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[5], full_inter_pupil_error, tutor.epoch)
+
+        tensorboard_writer.add_scalar(tensorboard_tags[6], common_inter_ocular_error, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[7], challenging_inter_ocular_error, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[8], full_inter_ocular_error, tutor.epoch)
+
+        tensorboard_writer.add_scalar(tensorboard_tags[9], common_diagonal_box_error, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[10], challenging_diagonal_box_error, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[11], full_diagonal_box_error, tutor.epoch)
+
+        tensorboard_writer.add_scalar(tensorboard_tags[12], public_300w_auc_0_08, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[13], public_300w_failure_rate, tutor.epoch)
+
+        tensorboard_writer.add_scalar(tensorboard_tags[14], private_300w_auc_0_08, tutor.epoch)
+        tensorboard_writer.add_scalar(tensorboard_tags[15], private_300w_failure_rate, tutor.epoch)
+
 
 def prepare_datasets():
     afw_dataset = AFWDataset(afw_database_root)
@@ -137,8 +177,7 @@ def prepare_datasets():
     # train_dataset = LandmarkDataset(datasets=train_datasets, is_train=True)
     # np.save("average_landmark", train_dataset.average_landmark)
 
-    preload_average_landmark = np.load("average_landmark.npy")
-    train_dataset = LandmarkDataset(datasets=train_datasets, is_train=True, average_landmark=preload_average_landmark)
+    train_dataset = LandmarkDataset(datasets=train_datasets, is_train=True, average_landmark=None)
 
     common_test_dataset = LandmarkDataset(datasets=common_test_datasets, is_train=False,
                                           average_landmark=train_dataset.average_landmark)
@@ -235,7 +274,7 @@ def test(tutor: Tutor, test_data_set: LandmarkDataset):
 
     time_string = get_time_string()
     current_learning_rate = tutor.get_current_learning_rate()
-    phase_string = '%s Test.| Epoch %d, learning rate: %f' % (time_string, tutor.epoch, current_learning_rate)
+    phase_string = '%s Test  | Epoch %d, learning rate: %f' % (time_string, tutor.epoch, current_learning_rate)
     print(phase_string)
 
     predicted_landmarks = []
@@ -251,12 +290,11 @@ def test(tutor: Tutor, test_data_set: LandmarkDataset):
         description = "%s Test  | Epoch %d" % (time_string, tutor.epoch)
         epoch_bar.set_description(description)
 
-        for (_output, _target) in zip(output, target[0]):
+        for index, (_output, _target) in enumerate(zip(output, target[0])):
             landmark_delta = _output.view(-1, 2).cpu().numpy()
-            predicted_landmark = test_data_set.average_landmark + landmark_delta
+            predicted_landmark = tutor.network.untransform_landmark(landmark_delta, index)
 
-            gt_landmark_delta = _target.view(-1, 2).cpu().numpy()
-            gt_landmark = test_data_set.average_landmark + gt_landmark_delta
+            gt_landmark = _target.view(-1, 2).cpu().numpy()
 
             predicted_landmarks.append(predicted_landmark)
             gt_landmarks.append(gt_landmark)
@@ -264,7 +302,7 @@ def test(tutor: Tutor, test_data_set: LandmarkDataset):
     evaluator = LandmarkEvaluator(predicted_landmarks, gt_landmarks)
 
     time_string = get_time_string()
-    description = "%s Test.| Epoch %d" % (time_string, tutor.epoch)
+    description = "%s Test  | Epoch %d" % (time_string, tutor.epoch)
     print(description)
 
     return evaluator

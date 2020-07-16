@@ -1,3 +1,5 @@
+import numpy as np
+
 import torch
 import torch.nn as nn
 
@@ -27,6 +29,12 @@ class VGGBasedModel(nn.Module):
         self.fc1 = nn.Conv2d(in_channels=512, out_channels=256, kernel_size=7, padding=0)
         self.fc2 = nn.Linear(in_features=256, out_features=136)
 
+        self.fc1_feature = None
+
+        self.previous_landmarks = None
+        self.transform_matrices = None
+        self.untransform_matrices = None
+
     def forward(self, x):
         x = self.conv1a(x)
         x = self.conv1b(x)
@@ -47,18 +55,68 @@ class VGGBasedModel(nn.Module):
         x = self.dropout(x)
 
         x = self.fc1(x)
+        self.fc1_feature = x
+
         x = x.squeeze()
         x = self.fc2(x)
 
         return x
 
     def loss(self, prediction, target):
-        landmark_delta_target = target[0]
+        landmark = target[0].view(-1, 68, 2)
+        predicted_landmark_deltas = prediction.view(-1, 68, 2)
+
+        predicted_landmarks = []
+
+        for (prev_landmark, transform_matrix, untransform_matrix, predicted_landmark_delta) in zip(
+                self.previous_landmarks,
+                self.transform_matrices,
+                self.untransform_matrices,
+                predicted_landmark_deltas):
+            transform_matrix = torch.tensor(transform_matrix, device=prediction.device)
+            untransform_matrix = torch.tensor(untransform_matrix, device=prediction.device)
+
+            prev_landmark = torch.tensor(prev_landmark, device=prediction.device)
+            prev_landmark = torch.cat(
+                [prev_landmark, torch.ones((68, 1), dtype=torch.float32, device=prediction.device)],
+                axis=1)
+
+            predicted_landmark = torch.matmul(transform_matrix, prev_landmark.T).T + predicted_landmark_delta
+            predicted_landmark = torch.cat(
+                [predicted_landmark, torch.ones((68, 1), dtype=torch.float32, device=prediction.device)], axis=1)
+
+            predicted_landmark = torch.matmul(untransform_matrix, predicted_landmark.T).T
+
+            predicted_landmarks.append(predicted_landmark)
+
         pupil_distance = target[1]
 
-        loss = nn.MSELoss()(prediction / pupil_distance.view(-1, 1), landmark_delta_target / pupil_distance.view(-1, 1))
+        predicted_landmarks = torch.stack(predicted_landmarks, axis=0)
+
+        loss = nn.MSELoss()(predicted_landmarks / pupil_distance.view(-1, 1, 1),
+                            landmark / pupil_distance.view(-1, 1, 1))
 
         return loss
+
+    def untransform_landmark(self, landmark_delta, index):
+        landmark_delta = landmark_delta.reshape(68, 2)
+
+        previous_landmark = self.previous_landmarks[index]
+        transform_matrix = self.transform_matrices[index]
+        untransform_matrix = self.untransform_matrices[index]
+
+        previous_landmark = np.hstack([previous_landmark, np.ones((previous_landmark.shape[0], 1))]).T
+        landmark = np.matmul(transform_matrix, previous_landmark).T + landmark_delta
+
+        landmark = np.hstack([landmark, np.ones((landmark.shape[0], 1))]).T
+        landmark = np.matmul(untransform_matrix, landmark).T
+
+        return landmark
+
+    def set_previous_prediction_prior(self, previous_landmarks, transform_matrices, untransform_matrices):
+        self.previous_landmarks = previous_landmarks
+        self.transform_matrices = transform_matrices
+        self.untransform_matrices = untransform_matrices
 
 
 class ConvolutionBatchNormReLU(nn.Module):
@@ -75,45 +133,3 @@ class ConvolutionBatchNormReLU(nn.Module):
         x = self.relu(x)
 
         return x
-
-
-class ConnectionLayers(nn.Module):
-    def __init__(self):
-        super(ConnectionLayers, self).__init__()
-
-        self.fc = nn.Linear(in_feature=512, out_features=3136)
-        self.relu = nn.ReLU()
-        self.upsample = nn.UpsamplingBilinear2d(size=(112, 112))
-
-    def forward(self, image, previous_landmark, current_landmark, middle_feature_vector):
-        transform_matrix = self.estimate_transform_matrix(previous_landmark, current_landmark)
-        transformed_landmark = self.transform_landmark(current_landmark, transform_matrix)
-        transformed_image = self.transform_image(image, transform_matrix)
-        heatmap = self.generate_heatmap(image.shape, transformed_landmark)
-
-        x = self.fc(middle_feature_vector)
-        x = self.relu(x)
-        x = torch.reshape(x, (-1, 56, 56, 1))
-        x = self.upsample(x)
-
-        return transformed_image, heatmap, x
-
-    @staticmethod
-    def estimate_transform_matrix(previous_landmark, current_landmark):
-        matrix = None
-        return matrix
-
-    @staticmethod
-    def transform_image(image, transform_matrix):
-        transformed_image = None
-        return image
-
-    @staticmethod
-    def transform_landmark(current_landmark, transform_matrix):
-        transformed_landmark = None
-        return transformed_landmark
-
-    @staticmethod
-    def generate_heatmap(image_size, landmark):
-        heatmap_image = None
-        return heatmap_image

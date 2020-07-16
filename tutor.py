@@ -29,7 +29,7 @@ class Tutor:
 
         self.snapshot_directory = "snapshots"
 
-        self.best_error = sys.float_info.max
+        self.best_error = float('inf')
         self.epoch = 0
 
     def train(self, input_data, target):
@@ -109,7 +109,7 @@ class Tutor:
         if 'best_error' in train_state.keys():
             self.best_error = train_state['best_error']
         else:
-            self.best_error = sys.float_info.max
+            self.best_error = float('inf')
 
         self.epoch = train_state['epoch']
 
