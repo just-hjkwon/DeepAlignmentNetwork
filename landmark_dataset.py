@@ -16,7 +16,7 @@ class LandmarkDataset(Dataset):
 
         self.target_size = 112
         self.target_face_box_size_range = (self.target_size * 0.35, self.target_size * 0.75)
-        self.target_average_face_box_size = 60
+        self.target_average_face_box_size = 56
 
         self.transforms = transforms.Compose([
             transforms.ToTensor()
@@ -174,8 +174,11 @@ class LandmarkDataset(Dataset):
         box_height = face_box[3] - face_box[1]
         box_length = max(box_width, box_height)
 
-        scale = random.uniform(self.target_face_box_size_range[0] / box_length,
-                               self.target_face_box_size_range[1] / box_length)
+        if self.is_train is True:
+            scale = random.uniform(self.target_face_box_size_range[0] / box_length,
+                                   self.target_face_box_size_range[1] / box_length)
+        else:
+            scale = self.target_average_face_box_size / box_length
 
         width, height = image.shape[1], image.shape[0]
         resized_width = int(round(width * scale))
@@ -191,8 +194,9 @@ class LandmarkDataset(Dataset):
         face_box[1::2] *= height_scale
         box_center = [face_box[0::2].mean(), face_box[1::2].mean()]
 
-        box_center[0] += random.randint(-5, 5)
-        box_center[1] += random.randint(-5, 5)
+        if self.is_train is True:
+            box_center[0] += random.randint(-5, 5)
+            box_center[1] += random.randint(-5, 5)
 
         crop_x = int(round(box_center[0] - 56))
         crop_y = int(round(box_center[1] - 56))
