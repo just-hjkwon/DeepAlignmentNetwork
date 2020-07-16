@@ -11,7 +11,7 @@ from .vgg_based_model import VGGBasedModel
 
 
 class DeepAlignmentNetwork(nn.Module):
-    def __init__(self, average_landmark, stage_count):
+    def __init__(self, average_landmark, stage_count, end_to_end=False):
         super(DeepAlignmentNetwork, self).__init__()
 
         self.average_landmark = average_landmark.astype(dtype=np.float32)
@@ -30,16 +30,19 @@ class DeepAlignmentNetwork(nn.Module):
         self.models[0].load_state_dict(
             torch.load("/home/hjkwon/Desktop/DeepAlignmentNetwork-4-1st_stage/snapshots/best.weights"))
 
-        for i in range(stage_count - 1):
-            for param in self.models[i].parameters():
-                param.requires_grad = False
+        if end_to_end is False:
+            for i in range(stage_count - 1):
+                for param in self.models[i].parameters():
+                    param.requires_grad = False
 
         self.transform_matrices = []
         self.untransform_matrices = []
+        self.middle_stage_outputs = []
 
     def forward(self, x):
         self.transform_matrices = []
         self.untransform_matrices = []
+        self.middle_stage_outputs = []
 
         images = x.cpu().numpy()
         images = np.transpose(np.clip(images * 255.0, 0, 255).astype(np.uint8), (0, 2, 3, 1))
@@ -58,6 +61,8 @@ class DeepAlignmentNetwork(nn.Module):
 
                 x = self.models[i](x)
 
+                self.middle_stage_outputs.append(x)
+
                 landmark_delta = x.view(-1, 68, 2).detach().cpu().numpy()
                 previous_landmark = self.average_landmark + landmark_delta
             else:
@@ -69,6 +74,8 @@ class DeepAlignmentNetwork(nn.Module):
                 self.models[i].set_previous_prediction_prior(previous_landmark, self.connection_layer.transform_matrices, self.connection_layer.untransform_matrices)
 
                 x = self.models[i](x)
+
+                self.middle_stage_outputs.append(x)
 
         image = np.copy(images[0])
         landmark_delta = x[0].detach().cpu().numpy()
@@ -86,8 +93,8 @@ class DeepAlignmentNetwork(nn.Module):
         loss = None
 
         for i in range(self.stage_count):
-            if i == 0:
-                loss = self.models[i].loss(prediction, target)
+            if i != self.stage_count - 1:
+                loss = self.models[i].loss(self.middle_stage_outputs[i], target)
             else:
                 loss += self.models[i].loss(prediction, target)
 
