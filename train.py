@@ -177,8 +177,7 @@ def prepare_datasets():
     # train_dataset = LandmarkDataset(datasets=train_datasets, is_train=True)
     # np.save("average_landmark", train_dataset.average_landmark)
 
-    preload_average_landmark = np.load("average_landmark.npy")
-    train_dataset = LandmarkDataset(datasets=train_datasets, is_train=True, average_landmark=preload_average_landmark)
+    train_dataset = LandmarkDataset(datasets=train_datasets, is_train=True, average_landmark=None)
 
     common_test_dataset = LandmarkDataset(datasets=common_test_datasets, is_train=False,
                                           average_landmark=train_dataset.average_landmark)
