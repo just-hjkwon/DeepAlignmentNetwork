@@ -15,7 +15,7 @@ class LandmarkDataset(Dataset):
         super(LandmarkDataset, self).__init__()
 
         self.target_size = 112
-        self.target_face_box_size_range = (self.target_size * 0.35, self.target_size * 0.75)
+        self.target_face_box_size_range = (self.target_size * 0.30, self.target_size * 0.75)
         self.target_average_face_box_size = 56
 
         self.transforms = transforms.Compose([
@@ -195,8 +195,8 @@ class LandmarkDataset(Dataset):
         box_center = [face_box[0::2].mean(), face_box[1::2].mean()]
 
         if self.is_train is True:
-            box_center[0] += random.randint(-5, 5)
-            box_center[1] += random.randint(-5, 5)
+            box_center[0] += random.randint(-10, 10)
+            box_center[1] += random.randint(-10, 10)
 
         crop_x = int(round(box_center[0] - 56))
         crop_y = int(round(box_center[1] - 56))
