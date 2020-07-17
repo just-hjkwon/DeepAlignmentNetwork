@@ -6,6 +6,9 @@ import torch
 
 import numpy as np
 import cv2
+import imgaug as ia
+import imgaug.augmenters as iaa
+from imgaug.augmentables import Keypoint, KeypointsOnImage
 
 from pytorch_tools.image.cropper import Cropper
 
@@ -207,6 +210,29 @@ class LandmarkDataset(Dataset):
 
         landmark[:, 0] -= crop_x
         landmark[:, 1] -= crop_y
+
+        if self.is_train is True:
+            augmentations = iaa.Sequential([iaa.Sometimes(0.5, iaa.Add((-30, 30))),
+                                                iaa.Sometimes(0.5, iaa.LinearContrast((0.4, 1.6))),
+                                                iaa.Sometimes(0.5, iaa.Fliplr(0.5))], random_order=True)
+
+            keypoints = KeypointsOnImage([Keypoint(x=l[0], y=l[1]) for l in landmark], shape=image.shape)
+            image, keypoints = augmentations(image=image, keypoints=keypoints)
+
+            if landmark[0, 0] != keypoints.keypoints[0].x:
+                landmark_flip_mapping_indices = [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+                                                 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
+                                                 27, 28, 29, 30,
+                                                 35, 34, 33, 32, 31,
+                                                 45, 44, 43, 42, 47, 46, 39, 38, 37, 36, 41, 40,
+                                                 54, 53, 52, 51, 50, 49, 48,
+                                                 59, 58, 57, 56, 55,
+                                                 64, 63, 62, 61, 60, 67, 66, 65
+                                                 ]
+
+                for target_i, source_i in enumerate(landmark_flip_mapping_indices):
+                    landmark[target_i, 0] = keypoints.keypoints[source_i].x
+                    landmark[target_i, 1] = keypoints.keypoints[source_i].y
 
         left_pupil = landmark[36:42, :].mean(axis=0)
         right_pupil = landmark[42:48, :].mean(axis=0)
