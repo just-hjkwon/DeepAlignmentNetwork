@@ -232,7 +232,7 @@ class LandmarkDataset(Dataset):
             keypoints = KeypointsOnImage([Keypoint(x=l[0], y=l[1]) for l in landmark], shape=image.shape)
             image, keypoints = augmentations(image=image, keypoints=keypoints)
 
-            if landmark[0, 0] != keypoints.keypoints[0].x:
+            if keypoints.keypoints[0].x > keypoints.keypoints[16].x:
                 landmark_flip_mapping_indices = [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
                                                  26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
                                                  27, 28, 29, 30,
@@ -246,6 +246,10 @@ class LandmarkDataset(Dataset):
                 for target_i, source_i in enumerate(landmark_flip_mapping_indices):
                     landmark[target_i, 0] = keypoints.keypoints[source_i].x
                     landmark[target_i, 1] = keypoints.keypoints[source_i].y
+            else:
+                for target_i in range(68):
+                    landmark[target_i, 0] = keypoints.keypoints[target_i].x
+                    landmark[target_i, 1] = keypoints.keypoints[target_i].y
         else:
             image = Cropper.crop(image, crop_x, crop_y, self.target_size, self.target_size)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
