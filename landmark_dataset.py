@@ -1,4 +1,5 @@
 import random
+import math
 
 from torch.utils.data.dataset import Dataset
 from torchvision import transforms
@@ -204,17 +205,26 @@ class LandmarkDataset(Dataset):
         crop_x = int(round(box_center[0] - 56))
         crop_y = int(round(box_center[1] - 56))
 
-        image = Cropper.crop(image, crop_x, crop_y, self.target_size, self.target_size)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        image = np.expand_dims(image, axis=2)
-
-        landmark[:, 0] -= crop_x
-        landmark[:, 1] -= crop_y
-
         if self.is_train is True:
-            augmentations = iaa.Sequential([iaa.Sometimes(0.5, iaa.Add((-30, 30))),
-                                                iaa.Sometimes(0.5, iaa.LinearContrast((0.4, 1.6))),
-                                                iaa.Sometimes(0.5, iaa.Fliplr(0.5))], random_order=True)
+            rotation_margin = int(math.ceil(((math.sqrt(2.0) * 112) - 112) / 2.0))
+            crop_x -= rotation_margin
+            crop_y -= rotation_margin
+
+            image = Cropper.crop(image, crop_x, crop_y,
+                                 self.target_size + (2 * rotation_margin), self.target_size + (2 * rotation_margin))
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            image = np.expand_dims(image, axis=2)
+
+            landmark[:, 0] -= crop_x
+            landmark[:, 1] -= crop_y
+
+            augmentations = iaa.Sequential([
+                iaa.Sequential([iaa.Rotate((-30, 30)),
+                                iaa.CenterCropToFixedSize(height=self.target_size, width=self.target_size)]),
+                iaa.Sequential([iaa.Sometimes(0.5, iaa.Add((-30, 30))),
+                                iaa.Sometimes(0.5, iaa.LinearContrast((0.4, 1.6))),
+                                iaa.Sometimes(0.5, iaa.Fliplr(0.5))], random_order=True)
+            ])
 
             keypoints = KeypointsOnImage([Keypoint(x=l[0], y=l[1]) for l in landmark], shape=image.shape)
             image, keypoints = augmentations(image=image, keypoints=keypoints)
@@ -233,6 +243,13 @@ class LandmarkDataset(Dataset):
                 for target_i, source_i in enumerate(landmark_flip_mapping_indices):
                     landmark[target_i, 0] = keypoints.keypoints[source_i].x
                     landmark[target_i, 1] = keypoints.keypoints[source_i].y
+        else:
+            image = Cropper.crop(image, crop_x, crop_y, self.target_size, self.target_size)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            image = np.expand_dims(image, axis=2)
+
+            landmark[:, 0] -= crop_x
+            landmark[:, 1] -= crop_y
 
         left_pupil = landmark[36:42, :].mean(axis=0)
         right_pupil = landmark[42:48, :].mean(axis=0)
