@@ -219,7 +219,10 @@ class LandmarkDataset(Dataset):
             landmark[:, 1] -= crop_y
 
             augmentations = iaa.Sequential([
-                iaa.Sequential([iaa.Rotate((-30, 30)),
+                iaa.Sequential([
+                                iaa.ScaleX((0.9, 1.1)),
+                                iaa.ScaleY((0.9, 1.1)),
+                                iaa.Rotate((-30, 30)),
                                 iaa.CenterCropToFixedSize(height=self.target_size, width=self.target_size)]),
                 iaa.Sequential([iaa.Sometimes(0.5, iaa.Add((-30, 30))),
                                 iaa.Sometimes(0.5, iaa.LinearContrast((0.4, 1.6))),
