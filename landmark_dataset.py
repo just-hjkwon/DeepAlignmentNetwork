@@ -220,13 +220,14 @@ class LandmarkDataset(Dataset):
 
             augmentations = iaa.Sequential([
                 iaa.Sequential([
-                                iaa.ScaleX((0.9, 1.1)),
-                                iaa.ScaleY((0.9, 1.1)),
-                                iaa.Rotate((-30, 30)),
-                                iaa.CenterCropToFixedSize(height=self.target_size, width=self.target_size)]),
+                    iaa.ScaleX((0.85, 1.15)),
+                    iaa.ScaleY((0.85, 1.15)),
+                    iaa.Rotate((-30, 30)),
+                    iaa.CenterCropToFixedSize(height=self.target_size, width=self.target_size)]),
                 iaa.Sequential([iaa.Sometimes(0.5, iaa.Add((-30, 30))),
-                                iaa.Sometimes(0.5, iaa.LinearContrast((0.4, 1.6))),
-                                iaa.Sometimes(0.5, iaa.Fliplr(0.5))], random_order=True)
+                                iaa.Sometimes(0.5, iaa.SomeOf(1, [iaa.GammaContrast((0.5, 2.0)),
+                                                                  iaa.LinearContrast((0.4, 1.6))])),
+                                iaa.Sometimes(0.5, iaa.Fliplr(1.0))], random_order=True)
             ])
 
             keypoints = KeypointsOnImage([Keypoint(x=l[0], y=l[1]) for l in landmark], shape=image.shape)
