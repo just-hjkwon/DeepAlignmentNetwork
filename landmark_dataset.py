@@ -9,6 +9,7 @@ import numpy as np
 import cv2
 import imgaug as ia
 import imgaug.augmenters as iaa
+import imgaug.parameters as iap
 from imgaug.augmentables import Keypoint, KeypointsOnImage
 
 from pytorch_tools.image.cropper import Cropper
@@ -220,10 +221,11 @@ class LandmarkDataset(Dataset):
 
             augmentations = iaa.Sequential([
                 iaa.Sequential([
-                    iaa.ScaleX((0.85, 1.15)),
-                    iaa.ScaleY((0.85, 1.15)),
-                    iaa.Rotate((-30, 30)),
-                    iaa.CenterCropToFixedSize(height=self.target_size, width=self.target_size)]),
+                    iaa.Scale(iap.Normal(1.0, 0.2)),
+                    iaa.Rotate(iap.Normal(0.0, 20.0)),
+                    iaa.CenterPadToFixedSize(height=self.target_size, width=self.target_size),
+                    iaa.CenterCropToFixedSize(height=self.target_size, width=self.target_size),
+                    ]),
                 iaa.Sequential([iaa.Sometimes(0.5, iaa.Add((-30, 30))),
                                 iaa.Sometimes(0.5, iaa.SomeOf(1, [iaa.GammaContrast((0.5, 2.0)),
                                                                   iaa.LinearContrast((0.4, 1.6))])),
