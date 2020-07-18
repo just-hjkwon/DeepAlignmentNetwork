@@ -209,6 +209,7 @@ class ConnectionLayers(nn.Module):
             x_distances, y_distances = np.meshgrid(xrange, yrange)
             distances = np.sqrt(x_distances * x_distances + y_distances * y_distances)
             heatmap_patch = 1.0 / (1.0 + distances)
+            heatmap_patch[distances > 16.0] = 0.0
 
             x = int(round(l[0])) + 16
             y = int(round(l[1])) + 16
