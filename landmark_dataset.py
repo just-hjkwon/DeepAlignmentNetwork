@@ -1,4 +1,5 @@
 import random
+import math
 
 from torch.utils.data.dataset import Dataset
 from torchvision import transforms
@@ -6,6 +7,10 @@ import torch
 
 import numpy as np
 import cv2
+import imgaug as ia
+import imgaug.augmenters as iaa
+import imgaug.parameters as iap
+from imgaug.augmentables import Keypoint, KeypointsOnImage
 
 from pytorch_tools.image.cropper import Cropper
 
@@ -15,8 +20,8 @@ class LandmarkDataset(Dataset):
         super(LandmarkDataset, self).__init__()
 
         self.target_size = 112
-        self.target_face_box_size_range = (self.target_size * 0.35, self.target_size * 0.75)
-        self.target_average_face_box_size = 60
+        self.target_face_box_size_range = (self.target_size * 0.30, self.target_size * 0.75)
+        self.target_average_face_box_size = 56
 
         self.transforms = transforms.Compose([
             transforms.ToTensor()
@@ -174,8 +179,11 @@ class LandmarkDataset(Dataset):
         box_height = face_box[3] - face_box[1]
         box_length = max(box_width, box_height)
 
-        scale = random.uniform(self.target_face_box_size_range[0] / box_length,
-                               self.target_face_box_size_range[1] / box_length)
+        if self.is_train is True:
+            scale = random.uniform(self.target_face_box_size_range[0] / box_length,
+                                   self.target_face_box_size_range[1] / box_length)
+        else:
+            scale = self.target_average_face_box_size / box_length
 
         width, height = image.shape[1], image.shape[0]
         resized_width = int(round(width * scale))
@@ -183,26 +191,73 @@ class LandmarkDataset(Dataset):
         width_scale = resized_width / width
         height_scale = resized_height / height
 
-        image = cv2.resize(image, (resized_width, resized_height))
+        if self.is_train is False:
+            image = cv2.resize(image, (resized_width, resized_height))
 
-        landmark[:, 0] *= width_scale
-        landmark[:, 1] *= height_scale
-        face_box[0::2] *= width_scale
-        face_box[1::2] *= height_scale
-        box_center = [face_box[0::2].mean(), face_box[1::2].mean()]
+            landmark[:, 0] *= width_scale
+            landmark[:, 1] *= height_scale
+            face_box[0::2] *= width_scale
+            face_box[1::2] *= height_scale
+            box_center = [face_box[0::2].mean(), face_box[1::2].mean()]
 
-        box_center[0] += random.randint(-5, 5)
-        box_center[1] += random.randint(-5, 5)
+            crop_x = int(round(box_center[0] - 56))
+            crop_y = int(round(box_center[1] - 56))
 
-        crop_x = int(round(box_center[0] - 56))
-        crop_y = int(round(box_center[1] - 56))
+        if self.is_train is True:
+            rotation_margin = int(math.ceil(((math.sqrt(2.0) * 3 * box_length) - box_length) / 2.0))
+            crop_x = int(face_box[0] - rotation_margin)
+            crop_y = int(face_box[1] - rotation_margin)
 
-        image = Cropper.crop(image, crop_x, crop_y, self.target_size, self.target_size)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        image = np.expand_dims(image, axis=2)
+            image = Cropper.crop(image, crop_x, crop_y,
+                                 int(box_length) + (2 * rotation_margin), int(box_length) + (2 * rotation_margin))
 
-        landmark[:, 0] -= crop_x
-        landmark[:, 1] -= crop_y
+            landmark[:, 0] -= crop_x
+            landmark[:, 1] -= crop_y
+
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            image = np.expand_dims(image, axis=2)
+
+            augmentations = iaa.Sequential([
+                iaa.Sequential([
+                                iaa.Affine(scale, translate_px={"x": (-10, 10), "y": (-10, 10)}, rotate=(-20, 20)),
+                                iaa.CenterPadToFixedSize(height=self.target_size, width=self.target_size),
+                                iaa.CenterCropToFixedSize(height=self.target_size, width=self.target_size),
+                                ]),
+                iaa.Sequential([iaa.Sometimes(0.5, iaa.Add((-40, 40))),
+                                iaa.Sometimes(0.5, iaa.SomeOf(1, [iaa.GammaContrast((0.5, 2.0)),
+                                                                  iaa.LinearContrast((0.4, 1.6))])),
+                                iaa.Sometimes(0.5, iaa.Fliplr(0.5))], random_order=True)
+
+            ])
+
+            keypoints = KeypointsOnImage([Keypoint(x=l[0], y=l[1]) for l in landmark], shape=image.shape)
+            image, keypoints = augmentations(image=image, keypoints=keypoints)
+
+            if keypoints.keypoints[0].x > keypoints.keypoints[16].x:
+                landmark_flip_mapping_indices = [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+                                                 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
+                                                 27, 28, 29, 30,
+                                                 35, 34, 33, 32, 31,
+                                                 45, 44, 43, 42, 47, 46, 39, 38, 37, 36, 41, 40,
+                                                 54, 53, 52, 51, 50, 49, 48,
+                                                 59, 58, 57, 56, 55,
+                                                 64, 63, 62, 61, 60, 67, 66, 65
+                                                 ]
+
+                for target_i, source_i in enumerate(landmark_flip_mapping_indices):
+                    landmark[target_i, 0] = keypoints.keypoints[source_i].x
+                    landmark[target_i, 1] = keypoints.keypoints[source_i].y
+            else:
+                for target_i in range(68):
+                    landmark[target_i, 0] = keypoints.keypoints[target_i].x
+                    landmark[target_i, 1] = keypoints.keypoints[target_i].y
+        else:
+            image = Cropper.crop(image, crop_x, crop_y, self.target_size, self.target_size)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            image = np.expand_dims(image, axis=2)
+
+            landmark[:, 0] -= crop_x
+            landmark[:, 1] -= crop_y
 
         left_pupil = landmark[36:42, :].mean(axis=0)
         right_pupil = landmark[42:48, :].mean(axis=0)

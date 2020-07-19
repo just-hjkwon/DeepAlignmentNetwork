@@ -34,7 +34,7 @@ gpu_count = len(gpu.split(','))
 device = torch.device("cuda:%s" % gpu if torch.cuda.is_available() else "cpu")
 
 learning_rate = 0.001
-weight_decay = 0.00005
+weight_decay = 0.00000
 
 num_workers = 4
 
@@ -64,10 +64,15 @@ def main():
 
     train_dataset, test_datasets = prepare_datasets()
 
-    # model = VGGBasedModel(in_channels=1, predefine_canonical_face_landmark=train_dataset.average_landmark)
-    model = DeepAlignmentNetwork(train_dataset.average_landmark, 2)
+    ## single stage model
+    # model = DeepAlignmentNetwork(train_dataset.average_landmark, 1)
+    ## double stage model
+    model = DeepAlignmentNetwork(train_dataset.average_landmark, 2, False)
 
-    tutor = Tutor(model, device, learning_rate=learning_rate, weight_decay=weight_decay)
+    ## for using previous stage's ptrained weight.
+    # model.load_state_dict(torch.load('./snapshots/best.weights'), strict=False)
+
+    tutor = Tutor(model, device, learning_rate=learning_rate, weight_decay=weight_decay, patience=99999)
 
     if load_snapshot is not None:
         tutor.load(load_snapshot)

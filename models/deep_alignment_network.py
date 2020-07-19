@@ -27,8 +27,6 @@ class DeepAlignmentNetwork(nn.Module):
                 self.models.add_module("VGGBasedModel %d" % i, model)
 
         self.connection_layer = ConnectionLayers(self.average_landmark)
-        self.models[0].load_state_dict(
-            torch.load("/home/hjkwon/Desktop/DeepAlignmentNetwork-4-1st_stage/snapshots/best.weights"))
 
         if end_to_end is False:
             for i in range(stage_count - 1):
@@ -94,9 +92,14 @@ class DeepAlignmentNetwork(nn.Module):
 
         for i in range(self.stage_count):
             if i != self.stage_count - 1:
-                loss = self.models[i].loss(self.middle_stage_outputs[i], target)
+                _loss = self.models[i].loss(self.middle_stage_outputs[i], target)
             else:
-                loss += self.models[i].loss(prediction, target)
+                _loss = self.models[i].loss(prediction, target)
+
+            if loss is None:
+                loss = _loss
+            else:
+                loss += _loss
 
         return loss
 
@@ -206,6 +209,7 @@ class ConnectionLayers(nn.Module):
             x_distances, y_distances = np.meshgrid(xrange, yrange)
             distances = np.sqrt(x_distances * x_distances + y_distances * y_distances)
             heatmap_patch = 1.0 / (1.0 + distances)
+            heatmap_patch[distances > 16.0] = 0.0
 
             x = int(round(l[0])) + 16
             y = int(round(l[1])) + 16
