@@ -191,45 +191,43 @@ class LandmarkDataset(Dataset):
         width_scale = resized_width / width
         height_scale = resized_height / height
 
-        image = cv2.resize(image, (resized_width, resized_height))
+        if self.is_train is False:
+            image = cv2.resize(image, (resized_width, resized_height))
 
-        landmark[:, 0] *= width_scale
-        landmark[:, 1] *= height_scale
-        face_box[0::2] *= width_scale
-        face_box[1::2] *= height_scale
-        box_center = [face_box[0::2].mean(), face_box[1::2].mean()]
+            landmark[:, 0] *= width_scale
+            landmark[:, 1] *= height_scale
+            face_box[0::2] *= width_scale
+            face_box[1::2] *= height_scale
+            box_center = [face_box[0::2].mean(), face_box[1::2].mean()]
 
-        if self.is_train is True:
-            box_center[0] += random.randint(-10, 10)
-            box_center[1] += random.randint(-10, 10)
-
-        crop_x = int(round(box_center[0] - 56))
-        crop_y = int(round(box_center[1] - 56))
+            crop_x = int(round(box_center[0] - 56))
+            crop_y = int(round(box_center[1] - 56))
 
         if self.is_train is True:
-            rotation_margin = int(math.ceil(((math.sqrt(2.0) * 112) - 112) / 2.0))
-            crop_x -= rotation_margin
-            crop_y -= rotation_margin
+            rotation_margin = int(math.ceil(((math.sqrt(2.0) * 3 * box_length) - box_length) / 2.0))
+            crop_x = int(face_box[0] - rotation_margin)
+            crop_y = int(face_box[1] - rotation_margin)
 
             image = Cropper.crop(image, crop_x, crop_y,
-                                 self.target_size + (2 * rotation_margin), self.target_size + (2 * rotation_margin))
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            image = np.expand_dims(image, axis=2)
+                                 int(box_length) + (2 * rotation_margin), int(box_length) + (2 * rotation_margin))
 
             landmark[:, 0] -= crop_x
             landmark[:, 1] -= crop_y
 
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            image = np.expand_dims(image, axis=2)
+
             augmentations = iaa.Sequential([
                 iaa.Sequential([
-                    iaa.Scale(iap.Normal(1.0, 0.2)),
-                    iaa.Rotate(iap.Normal(0.0, 20.0)),
-                    iaa.CenterPadToFixedSize(height=self.target_size, width=self.target_size),
-                    iaa.CenterCropToFixedSize(height=self.target_size, width=self.target_size),
-                    ]),
-                iaa.Sequential([iaa.Sometimes(0.5, iaa.Add((-30, 30))),
+                                iaa.Affine(scale, translate_px={"x": (-10, 10), "y": (-10, 10)}, rotate=(-20, 20)),
+                                iaa.CenterPadToFixedSize(height=self.target_size, width=self.target_size),
+                                iaa.CenterCropToFixedSize(height=self.target_size, width=self.target_size),
+                                ]),
+                iaa.Sequential([iaa.Sometimes(0.5, iaa.Add((-40, 40))),
                                 iaa.Sometimes(0.5, iaa.SomeOf(1, [iaa.GammaContrast((0.5, 2.0)),
                                                                   iaa.LinearContrast((0.4, 1.6))])),
-                                iaa.Sometimes(0.5, iaa.Fliplr(1.0))], random_order=True)
+                                iaa.Sometimes(0.5, iaa.Fliplr(0.5))], random_order=True)
+
             ])
 
             keypoints = KeypointsOnImage([Keypoint(x=l[0], y=l[1]) for l in landmark], shape=image.shape)
